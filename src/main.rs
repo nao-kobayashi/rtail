@@ -133,15 +133,23 @@ fn main() {
     let file_path = &args[1];
 
     //第2引数は初回の表示行数 デフォルト20行
-    let disp_rows: i32 = match args[2].parse(){
-        Ok(row) => row,
-        Err(_) => 20
+    let disp_rows: i32 = if args.len() < 3 {
+        20
+    } else {
+        match args[2].parse(){
+            Ok(row) => row,
+            Err(_) => 20
+        }
     };
 
     //第3引数はファイルの監視時間間隔 デフォルト3秒
-    let refresh_sec: u64 = match args[3].parse(){
-        Ok(sec) => sec,
-        Err(_) => 3
+    let refresh_sec: u64 = if args.len() < 4 {
+        3
+    } else {
+        match args[3].parse(){
+            Ok(sec) => sec,
+            Err(_) => 3
+        }
     };
 
     //初回のファイル読み込みと出力
