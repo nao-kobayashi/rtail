@@ -1,0 +1,8 @@
+[package]
+name = "rtail"
+version = "0.1.0"
+authors = ["kobayashi"]
+
+[dependencies]
+memmap = "0.6.2"
+encoding = "0.2.33"
