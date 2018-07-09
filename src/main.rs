@@ -7,6 +7,7 @@ use memmap::MmapOptions;
 use encoding::{ Encoding, DecoderTrap };
 use encoding::all::WINDOWS_31J;
 
+//初回に開いた際に出力開始インデックスを取得する。
 fn get_read_start_pos(mmap: &memmap::Mmap, length: usize, disp_rows: i32) -> usize {
     let mut index: usize = length - 1;
     let mut counter = disp_rows;
@@ -34,6 +35,7 @@ fn get_read_start_pos(mmap: &memmap::Mmap, length: usize, disp_rows: i32) -> usi
     index
 }
 
+//バッファしたデータを出力する。
 fn print_vec(buffer: Vec<u8>) {
     let mut index = 0;
     let mut output_vec: Vec<u8> = Vec::new();
@@ -41,6 +43,7 @@ fn print_vec(buffer: Vec<u8>) {
 
     while index < slice_len  {
         if (index + 1) < slice_len && &buffer[index] == &b"\r"[0] && &buffer[index + 1] == &b"\n"[0] {
+            //とりあえずUTF8でデコードし失敗したらshit-jis
             let cnv_string = if let Ok(output) = String::from_utf8(output_vec.clone()) {
                 output
             } else {
@@ -67,11 +70,13 @@ fn print_vec(buffer: Vec<u8>) {
     }
 }
 
-fn read_file(file_path: &str, disp_rows: i32) -> ReadResult {
+//ファイルを開いてmemmap生成
+fn get_memmap(file_path: &str) -> memmap::Mmap {
     let file = match File::open(file_path) {
         Ok(file) => file,
         Err(e) => {
-            panic!(format!("{:?}", e));
+            println!("file open error {:?}", e);
+            std::process::exit(-1);
         }
     };
 
@@ -79,11 +84,18 @@ fn read_file(file_path: &str, disp_rows: i32) -> ReadResult {
         match MmapOptions::new().map(&file) {
             Ok(map) => map,
             Err(e) => {
-                panic!(format!("{:?}", e));
+                println!("memmap error {:?}", e);
+                std::process::exit(-1);
             }
         }
     };
 
+    mmap
+}
+
+//初回のファイルを読み込む関数
+fn read_file(file_path: &str, disp_rows: i32) -> ReadResult {
+    let mmap = get_memmap(file_path);
     let length = *(&mmap.len() as &usize);
     let start_pos = get_read_start_pos(&mmap, length, disp_rows);
 
@@ -93,22 +105,9 @@ fn read_file(file_path: &str, disp_rows: i32) -> ReadResult {
     }
 }
 
+//2回目以降のファイル読み込み関数 前回読んだ位置からファイルの終端まで
 fn read_file_remain_all(file_path: &str, start_pos: usize) -> Option<ReadResult> {
-    let file = match File::open(file_path) {
-        Ok(file) => file,
-        Err(e) => {
-            panic!(format!("{:?}", e));
-        }
-    };
-
-    let mmap = unsafe { 
-        match MmapOptions::new().map(&file) {
-            Ok(map) => map,
-            Err(e) => {
-                panic!(format!("{:?}", e));
-            }
-        }
-    };
+    let mmap = get_memmap(file_path);
 
     let length = *(&mmap.len() as &usize);
     if length <= start_pos {
@@ -121,6 +120,7 @@ fn read_file_remain_all(file_path: &str, start_pos: usize) -> Option<ReadResult>
     })
 }
 
+//ファイル読み込み結果を格納する構造体
 struct ReadResult {
     read_buffer: Vec<u8>,
     buf_length: usize,
@@ -128,9 +128,23 @@ struct ReadResult {
 
 fn main() {
     let args: Vec<String> = args().collect();
-    let file_path = &args[1];
-    let disp_rows: i32 = args[2].parse().unwrap();
 
+    //第1引数はファイル名（必須）
+    let file_path = &args[1];
+
+    //第2引数は初回の表示行数 デフォルト20行
+    let disp_rows: i32 = match args[2].parse(){
+        Ok(row) => row,
+        Err(_) => 20
+    };
+
+    //第3引数はファイルの監視時間間隔 デフォルト3秒
+    let refresh_sec: u64 = match args[3].parse(){
+        Ok(sec) => sec,
+        Err(_) => 3
+    };
+
+    //初回のファイル読み込みと出力
     let read_result = read_file(file_path, disp_rows);
     let mut length = read_result.buf_length;
     print_vec(read_result.read_buffer);
@@ -143,7 +157,7 @@ fn main() {
                 length = x.buf_length;
             },
             None => {
-                std::thread::sleep(std::time::Duration::from_secs(3));
+                std::thread::sleep(std::time::Duration::from_secs(refresh_sec));
             }
         };
     }
