@@ -41,13 +41,11 @@ fn print_vec(buffer: Vec<u8>) {
 
     while index < slice_len  {
         if (index + 1) < slice_len && &buffer[index] == &b"\r"[0] && &buffer[index + 1] == &b"\n"[0] {
-            let copy_output_vec_utf = output_vec.clone();
-            let copy_output_vec_iso = output_vec.clone();
-            let cnv_string = if let Ok(output) = String::from_utf8(copy_output_vec_utf) {
+            let cnv_string = if let Ok(output) = String::from_utf8(output_vec.clone()) {
                 output
             } else {
                 let mut chars = String::new();
-                match WINDOWS_31J.decode_to(&copy_output_vec_iso, DecoderTrap::Replace, &mut chars) {
+                match WINDOWS_31J.decode_to(&output_vec, DecoderTrap::Replace, &mut chars) {
                     Ok(_) => {},
                     Err(e) => {
                         println!("parse error {:?}", e);
@@ -113,7 +111,6 @@ fn read_file_remain_all(file_path: &str, start_pos: usize) -> Option<ReadResult>
     };
 
     let length = *(&mmap.len() as &usize);
-
     if length <= start_pos {
         return None;
     }
