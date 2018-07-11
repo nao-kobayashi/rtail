@@ -13,13 +13,9 @@ fn get_read_start_pos(mmap: &memmap::Mmap, length: usize, disp_rows: i32) -> usi
     let mut counter = disp_rows;
 
     loop {
-        if index <= 1 { 
-            return 0;
-        }
+        if index <= 1 { return 0; }
 
-        let first_byte = index - 1;
-        let second_byte = index;
-        if &mmap[first_byte..first_byte + 1] == b"\r" && &mmap[second_byte..second_byte + 1] == b"\n" {
+        if &mmap[(index - 1)..(index + 1)] == b"\r\n" {
             index = index - 1;
             counter = counter - 1;
             if counter < 0 { 
@@ -40,9 +36,10 @@ fn print_vec(buffer: Vec<u8>) {
     let mut index = 0;
     let mut output_vec: Vec<u8> = Vec::new();
     let slice_len = buffer.len();
+    let return_cd: Vec<u8> = vec![13, 10];
 
     while index < slice_len  {
-        if (index + 1) < slice_len && &buffer[index] == &b"\r"[0] && &buffer[index + 1] == &b"\n"[0] {
+        if (index + 1) < slice_len && &buffer[index..index + 2] == return_cd.as_slice() {
             //とりあえずUTF8でデコードし失敗したらshit-jis
             let cnv_string = if let Ok(output) = String::from_utf8(output_vec.clone()) {
                 output
