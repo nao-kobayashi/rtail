@@ -11,59 +11,36 @@ use encoding::all::WINDOWS_31J;
 fn get_read_start_pos(mmap: &memmap::Mmap, length: usize, disp_rows: i32) -> usize {
     let mut index: usize = length - 1;
     let mut counter = disp_rows;
-
     loop {
         if index <= 1 { return 0; }
-
-        if &mmap[(index - 1)..(index + 1)] == b"\r\n" {
-            index = index - 1;
-            counter = counter - 1;
+        if &mmap[index..(index + 1)] == b"\n" {
+            counter -= 1;
+            //最後に見つかった改行分は出力不要
             if counter < 0 { 
-                //最後に見つかった改行分は出力不要
-                index = index + 2;
                 break; 
+            } else {
+                index -= 1;
             }
         } else {
-            index = index - 1;
+            index -= 1;
         }
     }
-
     index
 }
 
 //バッファしたデータを出力する。
 fn print_vec(buffer: Vec<u8>) {
-    let mut index = 0;
-    let mut output_vec: Vec<u8> = Vec::new();
-    let slice_len = buffer.len();
-    let return_cd: Vec<u8> = vec![13, 10];
-
-    while index < slice_len  {
-        if (index + 1) < slice_len && &buffer[index..index + 2] == return_cd.as_slice() {
-            //とりあえずUTF8でデコードし失敗したらshit-jis
-            let cnv_string = if let Ok(output) = String::from_utf8(output_vec.clone()) {
-                output
-            } else {
-                let mut chars = String::new();
-                match WINDOWS_31J.decode_to(&output_vec, DecoderTrap::Replace, &mut chars) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        println!("parse error {:?}", e);
-                        std::process::exit(-1);
-                    }
-                };
-
-                chars
-            };
-
-            println!("{}", cnv_string);
-            output_vec.clear();
-            //最後に見つかった改行分は出力不要
-            index = index + 2;
-        } else {
-            output_vec.push(buffer[index]);
-            index = index + 1;
-        }
+    let lines: _ = buffer.split(|b| *b == b'\n');
+    for line in lines {
+        if line.len() == 0 { continue; }
+        let cnv_result = if let Some(cnv_result) = encode(line) {
+            cnv_result
+        } else  {
+            println!("parse error.");
+            std::process::exit(-1);
+        };
+       
+        println!("{}", cnv_result);
     }
 }
 
@@ -123,6 +100,38 @@ struct ReadResult {
     buf_length: usize,
 }
 
+fn encode(buffer: &[u8]) -> Option<String> {
+    if let Some(utf) = encode_utf8(buffer) {
+        return Some(utf);
+    } else {
+        if let Some(sjis) = encode_shit_jis(buffer) {
+            return Some(sjis);
+        } else {
+            return None;
+        }
+    }
+}
+    
+fn encode_shit_jis(buffer: &[u8]) -> Option<String> {
+    let mut chars = String::new();
+    match WINDOWS_31J.decode_to(&buffer.to_vec(), DecoderTrap::Replace, &mut chars) {
+        Ok(_) => Some(chars),
+        Err(e) => {
+            println!("Shift Jis parse error.{:?}", e);
+            None
+        },
+    }
+}
+
+fn encode_utf8(buffer: &[u8]) -> Option<String> {
+    if let Ok(output) = String::from_utf8(buffer.to_vec()) {
+        Some(output)
+    }  else {
+        None
+    }
+}
+
+
 fn main() {
     let args: Vec<String> = args().collect();
 
@@ -167,3 +176,4 @@ fn main() {
         };
     }
 }
+
