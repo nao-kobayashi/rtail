@@ -2,20 +2,21 @@ extern crate memmap;
 extern crate encoding;
 
 use std::fs::File;
-use std::error::Error;
+use std::io::{ Write, stdout, Error };
 use memmap::MmapOptions;
 use encoding::{ Encoding, DecoderTrap };
 use encoding::all::WINDOWS_31J;
 
-fn print_vec(buffer: Vec<u8>) {
-    buffer.split(|buf| *buf == b'\n')
-        .filter(|buf| buf.len() > 0)
-        .map(|buf| decode(buf).unwrap_or("".to_owned()))
-        .for_each(|line| println!("{}", line));
+fn print_vec(buffer: Vec<u8>) -> Result<(), Error> {
+    let mut out = stdout();
+    let enc_str = decode(buffer.as_ref()).unwrap_or("".to_owned());
+    out.write_all(enc_str.as_bytes())?;
+    out.flush()?;
+    Ok(())
 }
 
 fn find_start_pos(mmap: &memmap::Mmap, length: usize, mut counter: i32) -> usize {
-    for i in (1..length).rev() {
+    for i in (0..length).skip(1).rev() {
         if mmap[i] == b'\n' {
             counter -= 1;
             if counter == 0 { return i + 1; }
@@ -42,25 +43,14 @@ fn read_file(file_path: &str, start_pos: Option<usize>, disp_rows: i32) -> Resul
 }
 
 fn decode(buffer: &[u8]) -> Option<String> {
-    if let Some(utf) = decode_utf8(buffer) {
-        Some(utf)
-    } else {
-        decode_shift_jis(buffer)
-    }
-}
+    let mut output = String::new();
 
-fn decode_shift_jis(buffer: &[u8]) -> Option<String> {
-    let mut chars = String::new();
-    if let Ok(_) = WINDOWS_31J.decode_to(&buffer.to_vec(), DecoderTrap::Replace, &mut chars) {
-        return Some(chars);
-    }
-    None
-}
-
-fn decode_utf8(buffer: &[u8]) -> Option<String> {
     if let Ok(output) = String::from_utf8(buffer.to_vec()) {
         return Some(output)
+    } else if let Ok(_) = WINDOWS_31J.decode_to(&buffer.to_vec(), DecoderTrap::Replace, &mut output) {
+        return Some(output);
     }
+
     None
 }
 
@@ -74,7 +64,9 @@ fn main() {
     loop {
         let result = read_file(&file_path, position, disp_rows).expect("ファイルの読み込みに失敗しました");
         if let Some(result) = result {
-            print_vec(result.0);
+            if let Err(e) = print_vec(result.0) {
+                panic!(format!("write error:{}", e));
+            }
             position = Some(result.1);
         } else {
             std::thread::sleep(std::time::Duration::from_secs(refresh_sec));
